@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/pkg/errors"
@@ -33,6 +34,9 @@ import (
 type LoadAffinity struct {
 	// NodeSelector specifies the label selector to match nodes
 	NodeSelector metav1.LabelSelector `json:"nodeSelector"`
+
+	// StorageClass specifies the VGDPs the LoadAffinity applied to. If the StorageClass doesn't have value, it applies to all. If not, it applies to only the VGDPs that use this StorageClass.
+	StorageClass string `json:"storageClass"`
 }
 
 type PodResources struct {
@@ -105,8 +109,9 @@ func EnsureDeletePod(ctx context.Context, podGetter corev1client.CoreV1Interface
 		return errors.Wrapf(err, "error to delete pod %s", pod)
 	}
 
+	var updated *corev1api.Pod
 	err = wait.PollUntilContextTimeout(ctx, waitInternal, timeout, true, func(ctx context.Context) (bool, error) {
-		_, err := podGetter.Pods(namespace).Get(ctx, pod, metav1.GetOptions{})
+		po, err := podGetter.Pods(namespace).Get(ctx, pod, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				return true, nil
@@ -115,11 +120,16 @@ func EnsureDeletePod(ctx context.Context, podGetter corev1client.CoreV1Interface
 			return false, errors.Wrapf(err, "error to get pod %s", pod)
 		}
 
+		updated = po
 		return false, nil
 	})
 
 	if err != nil {
-		return errors.Wrapf(err, "error to assure pod is deleted, %s", pod)
+		if errors.Is(err, context.DeadlineExceeded) {
+			return errors.Errorf("timeout to assure pod %s is deleted, finalizers in pod %v", pod, updated.Finalizers)
+		} else {
+			return errors.Wrapf(err, "error to assure pod is deleted, %s", pod)
+		}
 	}
 
 	return nil
@@ -256,4 +266,71 @@ func ToSystemAffinity(loadAffinities []*LoadAffinity) *corev1api.Affinity {
 	}
 
 	return nil
+}
+
+func DiagnosePod(pod *corev1api.Pod) string {
+	diag := fmt.Sprintf("Pod %s/%s, phase %s, node name %s\n", pod.Namespace, pod.Name, pod.Status.Phase, pod.Spec.NodeName)
+
+	for _, condition := range pod.Status.Conditions {
+		diag += fmt.Sprintf("Pod condition %s, status %s, reason %s, message %s\n", condition.Type, condition.Status, condition.Reason, condition.Message)
+	}
+
+	return diag
+}
+
+var funcExit = os.Exit
+var funcCreateFile = os.Create
+
+func ExitPodWithMessage(logger logrus.FieldLogger, succeed bool, message string, a ...any) {
+	exitCode := 0
+	if !succeed {
+		exitCode = 1
+	}
+
+	toWrite := fmt.Sprintf(message, a...)
+
+	podFile, err := funcCreateFile("/dev/termination-log")
+	if err != nil {
+		logger.WithError(err).Error("Failed to create termination log file")
+		exitCode = 1
+	} else {
+		if _, err := podFile.WriteString(toWrite); err != nil {
+			logger.WithError(err).Error("Failed to write error to termination log file")
+			exitCode = 1
+		}
+
+		podFile.Close()
+	}
+
+	funcExit(exitCode)
+}
+
+// GetLoadAffinityByStorageClass retrieves the LoadAffinity from the parameter affinityList.
+// The function first try to find by the scName. If there is no such LoadAffinity,
+// it will try to get the LoadAffinity whose StorageClass has no value.
+func GetLoadAffinityByStorageClass(
+	affinityList []*LoadAffinity,
+	scName string,
+	logger logrus.FieldLogger,
+) *LoadAffinity {
+	var globalAffinity *LoadAffinity
+
+	for _, affinity := range affinityList {
+		if affinity.StorageClass == scName {
+			logger.WithField("StorageClass", scName).Info("Found pod's affinity setting per StorageClass.")
+			return affinity
+		}
+
+		if affinity.StorageClass == "" && globalAffinity == nil {
+			globalAffinity = affinity
+		}
+	}
+
+	if globalAffinity != nil {
+		logger.Info("Use the Global affinity for pod.")
+	} else {
+		logger.Info("No Affinity is found for pod.")
+	}
+
+	return globalAffinity
 }

@@ -25,6 +25,10 @@ type ReplicaSpec struct {
 	// +optional
 	EngineName string `json:"engineName"`
 	// +optional
+	// MigrationEngineName is indicating the migrating engine which current connected to this replica. This is only
+	// used for live migration of v2 data engine
+	MigrationEngineName string `json:"migrationEngineName"`
+	// +optional
 	// HealthyAt is set the first time a replica becomes read/write in an engine after creation or rebuild. HealthyAt
 	// indicates the time the last successful rebuild occurred. When HealthyAt is set, a replica is likely to have
 	// useful (though possibly stale) data. HealthyAt is cleared before a rebuild. HealthyAt may be later than the
@@ -85,9 +89,6 @@ type ReplicaSpec struct {
 // ReplicaStatus defines the observed state of the Longhorn replica
 type ReplicaStatus struct {
 	InstanceStatus `json:""`
-	// Deprecated: Replaced by field `spec.evictionRequested`.
-	// +optional
-	EvictionRequested bool `json:"evictionRequested"`
 }
 
 // +genclient

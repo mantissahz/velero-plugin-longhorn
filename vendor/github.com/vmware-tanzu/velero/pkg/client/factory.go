@@ -19,12 +19,15 @@ package client
 import (
 	"os"
 
+	volumegroupsnapshotv1beta1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumegroupsnapshot/v1beta1"
+
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/client-go/discovery"
 	k8scheme "k8s.io/client-go/kubernetes/scheme"
 	kbclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	snapshotv1api "github.com/kubernetes-csi/external-snapshotter/client/v7/apis/volumesnapshot/v1"
+	snapshotv1api "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -56,6 +59,9 @@ type Factory interface {
 	// It adds Kubernetes and Velero types to its scheme. It uses the following priority to specify the cluster
 	// configuration: --kubeconfig flag, KUBECONFIG environment variable, in-cluster configuration.
 	KubebuilderWatchClient() (kbclient.WithWatch, error)
+	// DiscoveryClient returns a Kubernetes discovery client. It uses the following priority to specify the cluster
+	// configuration: --kubeconfig flag, KUBECONFIG environment variable, in-cluster configuration.
+	DiscoveryClient() (discovery.AggregatedDiscoveryInterface, error)
 	// SetBasename changes the basename for an already-constructed client.
 	// This is useful for generating clients that require a different user-agent string below the root `velero`
 	// command, such as the server subcommand.
@@ -162,6 +168,9 @@ func (f *factory) KubebuilderClient() (kbclient.Client, error) {
 	if err := snapshotv1api.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
+	if err := volumegroupsnapshotv1beta1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
 	kubebuilderClient, err := kbclient.New(clientConfig, kbclient.Options{
 		Scheme: scheme,
 	})
@@ -198,6 +207,9 @@ func (f *factory) KubebuilderWatchClient() (kbclient.WithWatch, error) {
 	if err := snapshotv1api.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
+	if err := volumegroupsnapshotv1beta1.AddToScheme(scheme); err != nil {
+		return nil, err
+	}
 	kubebuilderWatchClient, err := kbclient.NewWithWatch(clientConfig, kbclient.Options{
 		Scheme: scheme,
 	})
@@ -207,6 +219,14 @@ func (f *factory) KubebuilderWatchClient() (kbclient.WithWatch, error) {
 	}
 
 	return kubebuilderWatchClient, nil
+}
+
+func (f *factory) DiscoveryClient() (discovery.AggregatedDiscoveryInterface, error) {
+	clientConfig, err := f.ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+	return discovery.NewDiscoveryClientForConfig(clientConfig)
 }
 
 func (f *factory) SetBasename(name string) {

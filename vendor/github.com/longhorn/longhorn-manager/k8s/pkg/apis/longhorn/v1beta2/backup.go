@@ -5,14 +5,17 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 type BackupState string
 
 const (
-	// non-final state
+	// Non-final state
 	BackupStateNew        = BackupState("")
 	BackupStatePending    = BackupState("Pending")
 	BackupStateInProgress = BackupState("InProgress")
-	// final state
+	// Final state
 	BackupStateCompleted = BackupState("Completed")
 	BackupStateError     = BackupState("Error")
 	BackupStateUnknown   = BackupState("Unknown")
+	// Deleting is also considered as final state
+	// as it only happens when the backup is being deleting and has deletion timestamp
+	BackupStateDeleting = BackupState("Deleting")
 )
 
 type BackupCompressionMethod string
@@ -48,6 +51,11 @@ type BackupSpec struct {
 	// Can be "full" or "incremental"
 	// +optional
 	BackupMode BackupMode `json:"backupMode"`
+	// The backup block size. 0 means the legacy default size 2MiB, and -1 indicate the block size is invalid.
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Enum="-1";"2097152";"16777216"
+	// +optional
+	BackupBlockSize int64 `json:"backupBlockSize,string"`
 }
 
 // BackupStatus defines the observed state of the Longhorn backup
@@ -116,6 +124,9 @@ type BackupStatus struct {
 	// Size in bytes of reuploaded data
 	// +optional
 	ReUploadedDataSize string `json:"reUploadedDataSize"`
+	// The backup target name.
+	// +optional
+	BackupTargetName string `json:"backupTargetName"`
 }
 
 // +genclient
@@ -126,6 +137,7 @@ type BackupStatus struct {
 // +kubebuilder:printcolumn:name="SnapshotName",type=string,JSONPath=`.status.snapshotName`,description="The snapshot name"
 // +kubebuilder:printcolumn:name="SnapshotSize",type=string,JSONPath=`.status.size`,description="The snapshot size"
 // +kubebuilder:printcolumn:name="SnapshotCreatedAt",type=string,JSONPath=`.status.snapshotCreatedAt`,description="The snapshot creation time"
+// +kubebuilder:printcolumn:name="BackupTarget",type=string,JSONPath=`.status.backupTargetName`,description="The backup target name"
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`,description="The backup state"
 // +kubebuilder:printcolumn:name="LastSyncedAt",type=string,JSONPath=`.status.lastSyncedAt`,description="The backup last synced time"
 

@@ -10,6 +10,7 @@ const (
 	NodeConditionTypeRequiredPackages    = "RequiredPackages"
 	NodeConditionTypeNFSClientInstalled  = "NFSClientInstalled"
 	NodeConditionTypeSchedulable         = "Schedulable"
+	NodeConditionTypeHugePagesAvailable  = "HugePagesAvailable"
 )
 
 const (
@@ -27,7 +28,10 @@ const (
 	NodeConditionReasonPackagesNotInstalled      = "PackagesNotInstalled"
 	NodeConditionReasonCheckKernelConfigFailed   = "CheckKernelConfigFailed"
 	NodeConditionReasonNFSClientIsNotFound       = "NFSClientIsNotFound"
+	NodeConditionReasonNFSClientIsMisconfigured  = "NFSClientIsMisconfigured"
 	NodeConditionReasonKubernetesNodeCordoned    = "KubernetesNodeCordoned"
+	NodeConditionReasonHugePagesNotConfigured    = "HugePagesNotConfigured"
+	NodeConditionReasonInsufficientHugePages     = "InsufficientHugePages"
 )
 
 const (
@@ -45,17 +49,20 @@ const (
 )
 
 const (
-	ErrorReplicaScheduleInsufficientStorage              = "insufficient storage"
-	ErrorReplicaScheduleDiskNotFound                     = "disk not found"
-	ErrorReplicaScheduleDiskUnavailable                  = "disks are unavailable"
-	ErrorReplicaScheduleSchedulingSettingsRetrieveFailed = "failed to retrieve scheduling settings failed to retrieve"
-	ErrorReplicaScheduleTagsNotFulfilled                 = "tags not fulfilled"
-	ErrorReplicaScheduleNodeNotFound                     = "node not found"
-	ErrorReplicaScheduleNodeUnavailable                  = "nodes are unavailable"
-	ErrorReplicaScheduleEngineImageNotReady              = "none of the node candidates contains a ready engine image"
-	ErrorReplicaScheduleHardNodeAffinityNotSatisfied     = "hard affinity cannot be satisfied"
-	ErrorReplicaScheduleSchedulingFailed                 = "replica scheduling failed"
-	ErrorReplicaSchedulePrecheckNewReplicaFailed         = "precheck new replica failed"
+	ErrorReplicaScheduleInsufficientStorage               = "insufficient storage"
+	ErrorReplicaScheduleDiskNotFound                      = "disk not found"
+	ErrorReplicaScheduleDiskUnavailable                   = "disks are unavailable"
+	ErrorReplicaScheduleTagsNotFulfilled                  = "tags not fulfilled"
+	ErrorReplicaScheduleNodeNotFound                      = "node not found"
+	ErrorReplicaScheduleNodeUnavailable                   = "nodes are unavailable"
+	ErrorReplicaScheduleEngineImageNotReady               = "none of the node candidates contains a ready engine image"
+	ErrorReplicaScheduleHardNodeAffinityNotSatisfied      = "hard affinity cannot be satisfied"
+	ErrorReplicaScheduleLinkedCloneNotSatisfied           = "linked clone replica cannot be satisfied"
+	ErrorReplicaScheduleSchedulingFailed                  = "replica scheduling failed"
+	ErrorReplicaScheduleUnusedFailedReplicaIsNotSupported = "unused failed replica is not supported"
+	ErrorReplicaScheduleReplicaAlreadyScheduled           = "replica already scheduled"
+	ErrorReplicaScheduleLonghornClientOperationFailed     = "longhorn client operation failed"
+	ErrorReplicaScheduleIncompatibleVolumeSize            = "incompatible volume size"
 )
 
 type DiskType string
@@ -73,6 +80,7 @@ const (
 	DiskDriverNone = DiskDriver("")
 	DiskDriverAuto = DiskDriver("auto")
 	DiskDriverAio  = DiskDriver("aio")
+	DiskDriverNvme = DiskDriver("nvme")
 )
 
 type SnapshotCheckStatus struct {
@@ -86,7 +94,7 @@ type DiskSpec struct {
 	Type DiskType `json:"diskType"`
 	// +optional
 	Path string `json:"path"`
-	// +kubebuilder:validation:Enum="";auto;aio
+	// +kubebuilder:validation:Enum="";auto;aio;nvme
 	// +optional
 	DiskDriver DiskDriver `json:"diskDriver"`
 	// +optional
@@ -112,6 +120,9 @@ type DiskStatus struct {
 	// +optional
 	// +nullable
 	ScheduledReplica map[string]int64 `json:"scheduledReplica"`
+	// +optional
+	// +nullable
+	ScheduledBackingImage map[string]int64 `json:"scheduledBackingImage"`
 	// +optional
 	DiskUUID string `json:"diskUUID"`
 	// +optional
